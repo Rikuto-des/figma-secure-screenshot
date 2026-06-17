@@ -122,6 +122,18 @@ gh codespace ports forward 3055:3055 -c <CODESPACE_NAME>
 
 `url` か `nodeId` を渡さない場合は **Figma の現在の選択**が対象になります（Copy as PNG と同じ感覚）。
 
+## 2回目以降の起動（resume）
+
+初回セットアップ済みなら、毎回これだけ:
+
+1. **Codespace を再開**（アイドルで自動停止します。github.com/codespaces から開くか `gh codespace ssh` で再開）
+2. Codespace のターミナルで `npm run bridge`（`.env` を自動ロード）
+3. ローカル端末で `gh codespace ports forward 3055:3055 -c <Codespace名>`（開いたまま）
+4. Figma でプラグイン **Secure Screenshot Bridge** を実行 → **Connect**
+5. Copilot は MCP を自動起動（初回のみトークン入力）
+
+> Codespace のアイドル自動停止が煩わしい場合は、作成時に `gh codespace create --idle-timeout 90m` 等で延長できます。
+
 ## セキュリティモデル
 
 - **公開ポートなし。** ブリッジは Codespace 内に閉じ、`gh codespace ports forward` の
