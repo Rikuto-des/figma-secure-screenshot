@@ -1,9 +1,10 @@
 {
   "name": "Yasuda Figma MCP",
-  "id": "yasuda-figma-mcp",
+  "id": "1648967381756219385",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",
+  "documentAccess": "dynamic-page",
   "editorType": ["figma", "figjam", "dev"],
   "permissions": ["currentuser", "teamlibrary"],
   "networkAccess": {
