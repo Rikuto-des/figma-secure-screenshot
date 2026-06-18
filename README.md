@@ -52,6 +52,8 @@ The plugin reaches the Codespace bridge through `gh codespace ports forward` —
 
 If you don't pass `url`/`nodeId`, the tool operates on your **current selection** in Figma.
 
+> 🤝 **Teach your agent to use these tools well:** ready-made instruction/skill files for **Claude Code**, **Codex**, and **GitHub Copilot** live in [`integrations/`](integrations/) (design→code workflow, token reuse, node targeting).
+
 ## Setup ⭐ recommended (npx + Codespaces secret)
 
 No clone, no build, no per-project config. Do the **one-time setup** once; after that each project costs only **tunnel + Connect**.

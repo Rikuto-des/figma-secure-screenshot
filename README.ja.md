@@ -52,6 +52,8 @@
 
 `url`/`nodeId` を渡さない場合は、Figma の**現在の選択**が対象になります。
 
+> 🤝 **エージェントに上手く使わせる:** **Claude Code / Codex / GitHub Copilot** 用の指示・スキルファイルを [`integrations/`](integrations/) に用意しています(design→code の手順、トークン再利用、ノード指定のコツ)。
+
 ## セットアップ ⭐ 推奨(npx + Codespaces シークレット)
 
 clone も build もプロジェクト毎の設定も不要。**初回セットアップ**を1回やれば、以降は各プロジェクトで**トンネル + Connect だけ**です。
