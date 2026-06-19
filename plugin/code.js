@@ -608,7 +608,7 @@ async function applyUpdateSelection(params) {
   }
   const created = [];
   try {
-    await updateSelectedNode(node, params.root, "root", !parentIsAutoLayout(node));
+    await updateSelectedNode(node, params.root, "root", !parentIsAutoLayout(node), created);
     figma.currentPage.selection = [node];
     figma.viewport.scrollAndZoomIntoView([node]);
   } catch (e) {
@@ -618,24 +618,26 @@ async function applyUpdateSelection(params) {
   return applyOk(node, created);
 }
 
-// Update an existing node in place from the spec. E-1 updates the node's OWN
-// properties (frame layout/style, instance props, text). Child reconciliation
-// is E-2 and is rejected here with a clear message.
-async function updateSelectedNode(node, spec, path, isRoot) {
+// Update the SELECTED node from the spec root. The selected node's type must
+// match (we never silently replace what the user picked); descendants may be
+// replaced during child reconciliation.
+async function updateSelectedNode(node, spec, path, isRoot, created) {
   if (!typeCompatible(spec.type, node.type)) {
     throw new Error(
       "selected node is a " + node.type + " but the spec root is a " + spec.type + "; types must match for update-selection",
     );
   }
+  await updateInPlace(node, spec, path, isRoot, created);
+}
+
+// Update one existing node in place: frame own-props + child reconcile, instance
+// props, or text. componentId is ignored for instances (no component swap).
+async function updateInPlace(node, spec, path, isRoot, created) {
   if (spec.type === "frame") {
-    if (Array.isArray(spec.children) && spec.children.length > 0) {
-      throw new Error("updating the children of an existing frame is not supported yet; omit `children` to update the frame's own properties");
-    }
     await configureFrame(node, spec, path);
+    await reconcileChildren(node, spec, path, created);
     applyFrameSizing(node, spec, path, isRoot);
   } else if (spec.type === "instance") {
-    // componentId is ignored here — update-selection edits THIS instance; it does
-    // not swap to a different component.
     if (spec.name) node.name = spec.name;
     if (spec.props && Object.keys(spec.props).length > 0) {
       const defs = await defsForInstance(node);
@@ -646,6 +648,42 @@ async function updateSelectedNode(node, spec, path, isRoot) {
     }
   } else if (spec.type === "text") {
     await configureText(node, spec, path);
+  }
+}
+
+// Reconcile one existing child against a spec node: update in place when the
+// types match, otherwise replace it at the same position with a fresh build.
+async function reconcileNode(figmaNode, spec, path, created, parentAuto) {
+  if (!typeCompatible(spec.type, figmaNode.type)) {
+    const parent = figmaNode.parent;
+    const idx = parent.children.indexOf(figmaNode);
+    const fresh = await buildNode(spec, path, created);
+    parent.insertChild(idx, fresh);
+    if (spec.type === "frame") applyFrameSizing(fresh, spec, path, !isAutoLayoutFrame(parent));
+    figmaNode.remove();
+    return fresh;
+  }
+  await updateInPlace(figmaNode, spec, path, !parentAuto, created);
+  return figmaNode;
+}
+
+// Idempotent child diff by index: update/replace overlapping children, build
+// missing ones, remove surplus. The frame is auto-layout (configureFrame set it).
+async function reconcileChildren(frame, spec, path, created) {
+  const kids = Array.isArray(spec.children) ? spec.children : [];
+  for (let i = 0; i < kids.length; i++) {
+    const childPath = path + ".children[" + i + "]";
+    const existing = frame.children[i];
+    if (existing) {
+      await reconcileNode(existing, kids[i], childPath, created, true);
+    } else {
+      const fresh = await buildNode(kids[i], childPath, created);
+      frame.appendChild(fresh);
+      if (kids[i].type === "frame") applyFrameSizing(fresh, kids[i], childPath, false);
+    }
+  }
+  while (frame.children.length > kids.length) {
+    frame.children[frame.children.length - 1].remove();
   }
 }
 
@@ -817,16 +855,19 @@ async function dryValidateUpdate(node, spec, path, isRoot, errors) {
     errors.push({ path, message: "selected node is a " + node.type + " but the spec root is a " + spec.type + "; types must match for update-selection" });
     return;
   }
+  await dryUpdateInPlace(node, spec, path, isRoot, errors);
+}
+
+// Read-only mirror of updateInPlace / reconcile*, collecting every error.
+async function dryUpdateInPlace(node, spec, path, isRoot, errors) {
   if (spec.type === "frame") {
-    if (Array.isArray(spec.children) && spec.children.length > 0) {
-      errors.push({ path: path + ".children", message: "updating the children of an existing frame is not supported yet; omit `children`" });
-    }
     if (isRoot && (spec.width === "FILL" || spec.height === "FILL")) {
       errors.push({ path, message: '"FILL" needs an auto-layout parent; the selected frame has none' });
     }
     await dryCheckVar(spec.gap, "FLOAT", path + ".gap", errors);
     await dryCheckPaddingVars(spec.padding, path + ".padding", errors);
     await dryCheckVar(spec.fill, "COLOR", path + ".fill", errors);
+    await dryReconcileChildren(node, spec, path, errors);
   } else if (spec.type === "instance") {
     try {
       const defs = await defsForInstance(node);
@@ -844,6 +885,25 @@ async function dryValidateUpdate(node, spec, path, isRoot, errors) {
       }
     }
     await dryCheckVar(spec.fill, "COLOR", path + ".fill", errors);
+  }
+}
+
+async function dryReconcileNode(figmaNode, spec, path, parentAuto, errors) {
+  if (!typeCompatible(spec.type, figmaNode.type)) {
+    // Would be replaced by a fresh build — validate it as such.
+    await dryValidate(spec, path, !parentAuto, errors);
+    return;
+  }
+  await dryUpdateInPlace(figmaNode, spec, path, !parentAuto, errors);
+}
+
+async function dryReconcileChildren(frame, spec, path, errors) {
+  const kids = Array.isArray(spec.children) ? spec.children : [];
+  for (let i = 0; i < kids.length; i++) {
+    const childPath = path + ".children[" + i + "]";
+    const existing = frame.children[i];
+    if (existing) await dryReconcileNode(existing, kids[i], childPath, true, errors);
+    else await dryValidate(kids[i], childPath, false, errors);
   }
 }
 

@@ -50,8 +50,13 @@ Requires Figma **Design mode** (not Dev Mode). Build only from **existing compon
 4. **Apply** — call `yfigma_apply_ui_spec` (omit `validateOnly`) to build it.
 5. **Confirm** — `yfigma_get_screenshot` the returned root id, compare to intent, adjust and re-apply.
 
+**Editing vs creating** — pass `target.mode`: `"create"` (default — new screen at viewport
+center), `"into-selection"` (append the root into the selected auto-layout frame), or
+`"update-selection"` (update the selected node from the root: frame props + child diff, instance
+props, or text — types must match). For the selection modes, ask me to select the node in Figma first.
+
 Not yet supported (the tool will say so — don't work around it): `INSTANCE_SWAP` props,
-team-library components, in-place update (each apply creates a new screen).
+team-library components, swapping an instance's component during `update-selection`.
 
 Follow our existing code conventions and design-system naming. The `yfigma_get_*` / `yfigma_search_*`
 / `yfigma_list_*` tools are **read-only**; the only tool that changes Figma is **`yfigma_apply_ui_spec`**
