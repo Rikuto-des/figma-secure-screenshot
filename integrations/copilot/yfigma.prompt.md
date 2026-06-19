@@ -55,8 +55,11 @@ center), `"into-selection"` (append the root into the selected auto-layout frame
 `"update-selection"` (update the selected node from the root: frame props + child diff, instance
 props, or text — types must match). For the selection modes, ask me to select the node in Figma first.
 
-Not yet supported (the tool will say so — don't work around it): `INSTANCE_SWAP` props,
-team-library components, swapping an instance's component during `update-selection`.
+For an `INSTANCE_SWAP` prop, pass the **componentId** of the local component to swap in (find it
+with `yfigma_list_component_sets`).
+
+Not yet supported (the tool will say so — don't work around it): team-library components, swapping
+an instance's whole component during `update-selection`.
 
 Follow our existing code conventions and design-system naming. The `yfigma_get_*` / `yfigma_search_*`
 / `yfigma_list_*` tools are **read-only**; the only tool that changes Figma is **`yfigma_apply_ui_spec`**

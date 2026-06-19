@@ -644,7 +644,7 @@ async function updateInPlace(node, spec, path, isRoot, created) {
     if (spec.name) node.name = spec.name;
     if (spec.props && Object.keys(spec.props).length > 0) {
       const defs = await defsForInstance(node);
-      const map = resolveInstanceProps(defs, spec.props, path);
+      const map = await resolveInstanceProps(defs, spec.props, path);
       const needsFont = Object.keys(map).some((k) => defs[k] && defs[k].type === "TEXT");
       if (needsFont) await loadInstanceTextFonts(node);
       node.setProperties(map);
@@ -778,7 +778,7 @@ async function dryValidate(node, path, isRoot, errors) {
     try {
       const resolved = await resolveComponent(node.componentId);
       if (node.props && Object.keys(node.props).length > 0) {
-        resolveInstanceProps(resolved.defs, node.props, path); // throws on the first bad prop
+        await resolveInstanceProps(resolved.defs, node.props, path); // throws on the first bad prop
       }
     } catch (e) {
       errors.push({ path, message: errMsg(e) });
@@ -874,7 +874,7 @@ async function dryUpdateInPlace(node, spec, path, isRoot, errors) {
   } else if (spec.type === "instance") {
     try {
       const defs = await defsForInstance(node);
-      if (spec.props && Object.keys(spec.props).length > 0) resolveInstanceProps(defs, spec.props, path);
+      if (spec.props && Object.keys(spec.props).length > 0) await resolveInstanceProps(defs, spec.props, path);
     } catch (e) {
       errors.push({ path, message: errMsg(e) });
     }
@@ -965,7 +965,7 @@ async function buildInstance(node, path, created) {
   if (node.name) inst.name = node.name;
 
   if (node.props && Object.keys(node.props).length > 0) {
-    const map = resolveInstanceProps(resolved.defs, node.props, path);
+    const map = await resolveInstanceProps(resolved.defs, node.props, path);
     // Setting a TEXT property edits an inner text layer, which needs its font
     // loaded first. Variant/boolean changes don't.
     const needsFont = Object.keys(map).some((k) => resolved.defs[k] && resolved.defs[k].type === "TEXT");
@@ -1034,7 +1034,7 @@ async function resolveComponent(componentId) {
 // Resolve spec props (friendly names) to an exact-key setProperties() map,
 // validating each value against the component's definitions. Throws on the first
 // problem with a path-prefixed message.
-function resolveInstanceProps(defs, props, path) {
+async function resolveInstanceProps(defs, props, path) {
   const map = {};
   for (const specName of Object.keys(props)) {
     const key = resolvePropKey(defs, specName, path);
@@ -1054,12 +1054,32 @@ function resolveInstanceProps(defs, props, path) {
     } else if (def.type === "TEXT") {
       map[key] = String(value);
     } else if (def.type === "INSTANCE_SWAP") {
-      throw new Error(where + ": INSTANCE_SWAP properties are not supported yet");
+      // The value is a componentId; setProperties accepts the resolved node
+      // (string | boolean | ComponentNode | ComponentSetNode), so we pass the
+      // node object — no id/key ambiguity. Must be a local component.
+      map[key] = await resolveSwapComponent(value, where);
     } else {
       throw new Error(where + ": unsupported property type " + def.type);
     }
   }
   return map;
+}
+
+// Resolve an INSTANCE_SWAP value (a componentId) to the local component node to
+// swap in. Accepts a COMPONENT or COMPONENT_SET; rejects remote/library nodes.
+async function resolveSwapComponent(value, where) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(where + ": INSTANCE_SWAP value must be a componentId string");
+  }
+  const node = await figma.getNodeByIdAsync(value);
+  if (!node) throw new Error(where + ": swap component not found: " + value);
+  if (node.type !== "COMPONENT" && node.type !== "COMPONENT_SET") {
+    throw new Error(where + ": INSTANCE_SWAP value must reference a COMPONENT or COMPONENT_SET (got " + node.type + ")");
+  }
+  if (node.remote) {
+    throw new Error(where + ": swap component " + value + " is from a remote library; only local components are supported");
+  }
+  return node;
 }
 
 // Map a friendly prop name to the exact Figma key. VARIANT keys are the plain
