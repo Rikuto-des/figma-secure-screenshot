@@ -1,10 +1,12 @@
 # IDE から Figma へ UI を書き込む（code → design）— 設計
 
-> **ステータス：設計（未実装）。** 本ドキュメントは、このサーバに **書き込み経路** を
-> 追加し、**IDEから自然言語で指示するだけで Figma にUIを生成する** ための設計をまとめる。
-> 前提として、read-only プロジェクトの中核思想 **「デザインデータを私設・ローカル経路の
-> 外へ一切出さない」**（S3なし・Figma RESTなし・第三者なし・公開ポートなし・外向きHTTP
-> なし）を壊さないことを絶対条件とする。
+> **ステータス：実装中（A〜C 実装済み・実機未検証）。** 本ドキュメントは設計の背景、確定
+> スキーマと検証ルールは [UI_SPEC.ja.md](UI_SPEC.ja.md) を参照。書き込み op `apply_ui_spec`
+> と観測 op `list_component_sets` を実装済み（frame / instance＋props / text / トークン
+> バインド / HUG・FIXED・FILL）。**動作中の Figma での e2e 検証は未実施。** 前提として、
+> read-only プロジェクトの中核思想 **「デザインデータを私設・ローカル経路の外へ一切出さ
+> ない」**（S3なし・Figma RESTなし・第三者なし・公開ポートなし・外向きHTTPなし）を壊さ
+> ないことを絶対条件とする（書き込みもローカル文書を変更するだけで、egress を増やさない）。
 
 現状このサーバは read-only で、9つのツール（`src/mcp.ts` / `plugin/code.js`）は開いている
 Figmaドキュメントを **読むだけ**。本設計では、IDE側エージェント（GitHub Copilot /
@@ -142,14 +144,22 @@ IDE側の優位は、エージェントが **実コードベース**（コンポ
 見られる点。**Code Connect**（`get_code_connect_map`）で「コードのButton ⇄ Figmaの
 Button」を対応付ければ、IDEの文脈が spec のコンポーネント選択を直接駆動できる。
 
-## 未解決事項 / 今後
+## 実装済み / 未解決事項
 
-- **UI spec スキーマの確定**（ネスト構造・トークン参照記法・バリアント指定の表現）— 推奨する次の一手。
-- 単一オートレイアウト階層を超えるネスト / レスポンシブ制約。
-- チームライブラリ部品：`importComponentByKeyAsync` は publish 済みが前提。ローカル限定から始めるか判断。
-- 冪等性 / その場更新 vs 常に新規作成。
+**実装済み（A〜C、実機未検証）：** UI spec スキーマ確定（[UI_SPEC.ja.md](UI_SPEC.ja.md)）、
+Design モードガード、`list_component_sets`、`apply_ui_spec`（frame / instance＋props /
+text / トークンバインド / HUG・FIXED・FILL、atomic 適用、`validateOnly`）。ネストは再帰
+フレームで対応済み。
+
+**未解決 / 今後（D 以降）：**
+- 実機 e2e 検証（`setBoundVariable` / `setProperties`＋フォント / `setBoundVariableForPaint`
+  の挙動確認）— **最優先**。
+- `INSTANCE_SWAP` props（key/id 解決の確定が必要）。
+- チームライブラリ部品：`importComponentByKeyAsync`（publish 済み前提）。ローカル限定から拡張。
+- 冪等性 / その場更新 vs 常に新規作成（現状は常に新規）。
+- レスポンシブ制約（現状はオートレイアウトのみ）。
 
 ---
 
-**次の一歩：** UI spec スキーマ（IDE ⇄ プラグインの契約）を確定し、その後セキュリティ
-不変条件のもとで書き込み op を1つずつ実装する。
+**次の一歩：** 動作中の Figma で `apply_ui_spec` を `validateOnly` → 本適用で e2e 検証し、
+API 挙動の差異を潰す。
