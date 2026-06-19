@@ -52,14 +52,16 @@ Requires Figma **Design mode** (not Dev Mode). Build only from **existing compon
 
 **Editing vs creating** — pass `target.mode`: `"create"` (default — new screen at viewport
 center), `"into-selection"` (append the root into the selected auto-layout frame), or
-`"update-selection"` (update the selected node from the root: frame props + child diff, instance
-props, or text — types must match). For the selection modes, ask me to select the node in Figma first.
+`"update-selection"` (update the selected node from the root: frame props + child diff with
+name-based matching, instance props — and the instance's whole component is swapped if the root's
+`componentId` points at a different one — or text; types must match). For the selection modes, ask
+me to select the node in Figma first.
 
 For an `INSTANCE_SWAP` prop, pass the **componentId** of the local component to swap in (find it
 with `yfigma_list_component_sets`).
 
-Not yet supported (the tool will say so — don't work around it): team-library components, swapping
-an instance's whole component during `update-selection`.
+Not supported (the tool will say so — don't work around it): team-library components (this server is
+local-file only).
 
 Follow our existing code conventions and design-system naming. The `yfigma_get_*` / `yfigma_search_*`
 / `yfigma_list_*` tools are **read-only**; the only tool that changes Figma is **`yfigma_apply_ui_spec`**

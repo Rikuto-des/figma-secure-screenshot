@@ -631,7 +631,7 @@ async function updateSelectedNode(node, spec, path, isRoot, created) {
 }
 
 // Update one existing node in place: frame own-props + child reconcile, instance
-// props, or text. componentId is ignored for instances (no component swap).
+// (swap component if it differs, then props), or text.
 async function updateInPlace(node, spec, path, isRoot, created) {
   if (spec.type === "frame") {
     await configureFrame(node, spec, path);
@@ -642,10 +642,13 @@ async function updateInPlace(node, spec, path, isRoot, created) {
     applyFrameSizing(node, spec, path, isRoot);
   } else if (spec.type === "instance") {
     if (spec.name) node.name = spec.name;
+    const target = await resolveComponent(spec.componentId);
+    // Swap the whole component when the spec points at a different family. Same
+    // family (e.g. another variant of the same set) is handled by props below.
+    if ((await instanceFamilyId(node)) !== target.familyId) node.swapComponent(target.comp);
     if (spec.props && Object.keys(spec.props).length > 0) {
-      const defs = await defsForInstance(node);
-      const map = await resolveInstanceProps(defs, spec.props, path);
-      const needsFont = Object.keys(map).some((k) => defs[k] && defs[k].type === "TEXT");
+      const map = await resolveInstanceProps(target.defs, spec.props, path);
+      const needsFont = Object.keys(map).some((k) => target.defs[k] && target.defs[k].type === "TEXT");
       if (needsFont) await loadInstanceTextFonts(node);
       node.setProperties(map);
     }
@@ -654,40 +657,68 @@ async function updateInPlace(node, spec, path, isRoot, created) {
   }
 }
 
-// Reconcile one existing child against a spec node: update in place when the
-// types match, otherwise replace it at the same position with a fresh build.
-async function reconcileNode(figmaNode, spec, path, created, parentAuto) {
-  if (!typeCompatible(spec.type, figmaNode.type)) {
-    const parent = figmaNode.parent;
-    const idx = parent.children.indexOf(figmaNode);
-    const fresh = await buildNode(spec, path, created);
-    parent.insertChild(idx, fresh);
-    if (spec.type === "frame") applyFrameSizing(fresh, spec, path, !isAutoLayoutFrame(parent));
-    figmaNode.remove();
-    return fresh;
-  }
-  await updateInPlace(figmaNode, spec, path, !parentAuto, created);
-  return figmaNode;
-}
-
-// Idempotent child diff by index: update/replace overlapping children, build
-// missing ones, remove surplus. The frame is auto-layout (configureFrame set it).
+// Idempotent child diff with NAME-based matching: each spec child reuses an
+// existing child of the same name + compatible type (unnamed children fall back
+// to their position); unmatched spec children are built fresh, unmatched
+// existing children removed, and everything reordered to the spec order. Robust
+// to reordering across re-runs. The frame is auto-layout (configureFrame set it).
 async function reconcileChildren(frame, spec, path, created) {
   const kids = Array.isArray(spec.children) ? spec.children : [];
+  const existing = frame.children.slice();
+  const consumed = new Array(existing.length).fill(false);
+  const finalNodes = [];
+  const isFresh = [];
+
   for (let i = 0; i < kids.length; i++) {
     const childPath = path + ".children[" + i + "]";
-    const existing = frame.children[i];
-    if (existing) {
-      await reconcileNode(existing, kids[i], childPath, created, true);
+    const m = findChildMatch(existing, consumed, kids[i], i);
+    if (m >= 0) {
+      consumed[m] = true;
+      await updateInPlace(existing[m], kids[i], childPath, false, created); // in an auto-layout parent
+      finalNodes.push(existing[m]);
+      isFresh.push(false);
     } else {
-      const fresh = await buildNode(kids[i], childPath, created);
-      frame.appendChild(fresh);
-      if (kids[i].type === "frame") applyFrameSizing(fresh, kids[i], childPath, false);
+      finalNodes.push(await buildNode(kids[i], childPath, created));
+      isFresh.push(true);
     }
   }
-  while (frame.children.length > kids.length) {
-    frame.children[frame.children.length - 1].remove();
+
+  // Remove existing children no spec child claimed.
+  for (let j = 0; j < existing.length; j++) {
+    if (!consumed[j]) {
+      try {
+        existing[j].remove();
+      } catch (_) {
+        // already gone
+      }
+    }
   }
+  // Reorder/insert to the spec order, then size freshly built frame children
+  // (reconciled frames were already sized by updateInPlace, in their parent).
+  for (let i = 0; i < finalNodes.length; i++) frame.insertChild(i, finalNodes[i]);
+  for (let i = 0; i < finalNodes.length; i++) {
+    if (isFresh[i] && kids[i].type === "frame") {
+      applyFrameSizing(finalNodes[i], kids[i], path + ".children[" + i + "]", false);
+    }
+  }
+}
+
+// Pick an existing child for a spec child: by name + compatible type when the
+// spec child is named; otherwise the unconsumed child at the same index if its
+// type is compatible. Returns the existing index, or -1 to build fresh.
+function findChildMatch(existing, consumed, childSpec, index) {
+  if (childSpec.name) {
+    for (let j = 0; j < existing.length; j++) {
+      if (!consumed[j] && existing[j].name === childSpec.name && typeCompatible(childSpec.type, existing[j].type)) {
+        return j;
+      }
+    }
+    return -1;
+  }
+  if (index < existing.length && !consumed[index] && typeCompatible(childSpec.type, existing[index].type)) {
+    return index;
+  }
+  return -1;
 }
 
 // ---- selection helpers ----------------------------------------------------
@@ -713,20 +744,6 @@ function typeCompatible(specType, figmaType) {
     (specType === "instance" && figmaType === "INSTANCE") ||
     (specType === "text" && figmaType === "TEXT")
   );
-}
-
-// Property definitions for an existing instance, from the component set (variant
-// props live there) or the standalone main component.
-async function defsForInstance(inst) {
-  const main = await inst.getMainComponentAsync();
-  if (!main) return {};
-  let source = main;
-  if (main.parent && main.parent.type === "COMPONENT_SET") source = main.parent;
-  try {
-    return source.componentPropertyDefinitions || {};
-  } catch (e) {
-    return {};
-  }
 }
 
 function rollback(created) {
@@ -873,8 +890,10 @@ async function dryUpdateInPlace(node, spec, path, isRoot, errors) {
     if (spec.children !== undefined) await dryReconcileChildren(node, spec, path, errors);
   } else if (spec.type === "instance") {
     try {
-      const defs = await defsForInstance(node);
-      if (spec.props && Object.keys(spec.props).length > 0) await resolveInstanceProps(defs, spec.props, path);
+      // Validates the (swap) target component exists locally and props are valid
+      // against its definitions.
+      const target = await resolveComponent(spec.componentId);
+      if (spec.props && Object.keys(spec.props).length > 0) await resolveInstanceProps(target.defs, spec.props, path);
     } catch (e) {
       errors.push({ path, message: errMsg(e) });
     }
@@ -891,22 +910,20 @@ async function dryUpdateInPlace(node, spec, path, isRoot, errors) {
   }
 }
 
-async function dryReconcileNode(figmaNode, spec, path, parentAuto, errors) {
-  if (!typeCompatible(spec.type, figmaNode.type)) {
-    // Would be replaced by a fresh build — validate it as such.
-    await dryValidate(spec, path, !parentAuto, errors);
-    return;
-  }
-  await dryUpdateInPlace(figmaNode, spec, path, !parentAuto, errors);
-}
-
+// Read-only mirror of reconcileChildren's name-based matching.
 async function dryReconcileChildren(frame, spec, path, errors) {
   const kids = Array.isArray(spec.children) ? spec.children : [];
+  const existing = frame.children.slice();
+  const consumed = new Array(existing.length).fill(false);
   for (let i = 0; i < kids.length; i++) {
     const childPath = path + ".children[" + i + "]";
-    const existing = frame.children[i];
-    if (existing) await dryReconcileNode(existing, kids[i], childPath, true, errors);
-    else await dryValidate(kids[i], childPath, false, errors);
+    const m = findChildMatch(existing, consumed, kids[i], i);
+    if (m >= 0) {
+      consumed[m] = true;
+      await dryUpdateInPlace(existing[m], kids[i], childPath, false, errors);
+    } else {
+      await dryValidate(kids[i], childPath, false, errors);
+    }
   }
 }
 
@@ -1026,9 +1043,19 @@ async function resolveComponent(componentId) {
   if (node.type === "COMPONENT_SET") {
     const dv = node.defaultVariant;
     if (!dv) throw new Error("component set " + componentId + " has no default variant");
-    return { comp: dv, defs };
+    return { comp: dv, defs, familyId: node.id };
   }
-  return { comp: node, defs };
+  return { comp: node, defs, familyId: node.id };
+}
+
+// The "family" id of an existing instance: its component set's id when the main
+// component is a variant, else the main component's id. Compared against
+// resolveComponent().familyId to decide whether update-selection must swap.
+async function instanceFamilyId(inst) {
+  const main = await inst.getMainComponentAsync();
+  if (!main) return null;
+  if (main.parent && main.parent.type === "COMPONENT_SET") return main.parent.id;
+  return main.id;
 }
 
 // Resolve spec props (friendly names) to an exact-key setProperties() map,
