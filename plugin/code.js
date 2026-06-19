@@ -635,7 +635,10 @@ async function updateSelectedNode(node, spec, path, isRoot, created) {
 async function updateInPlace(node, spec, path, isRoot, created) {
   if (spec.type === "frame") {
     await configureFrame(node, spec, path);
-    await reconcileChildren(node, spec, path, created);
+    // Only touch children when the spec provides `children`. Omitting it leaves
+    // the existing children alone (partial update, like every other field); an
+    // explicit [] is the way to clear them.
+    if (spec.children !== undefined) await reconcileChildren(node, spec, path, created);
     applyFrameSizing(node, spec, path, isRoot);
   } else if (spec.type === "instance") {
     if (spec.name) node.name = spec.name;
@@ -867,7 +870,7 @@ async function dryUpdateInPlace(node, spec, path, isRoot, errors) {
     await dryCheckVar(spec.gap, "FLOAT", path + ".gap", errors);
     await dryCheckPaddingVars(spec.padding, path + ".padding", errors);
     await dryCheckVar(spec.fill, "COLOR", path + ".fill", errors);
-    await dryReconcileChildren(node, spec, path, errors);
+    if (spec.children !== undefined) await dryReconcileChildren(node, spec, path, errors);
   } else if (spec.type === "instance") {
     try {
       const defs = await defsForInstance(node);
