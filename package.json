@@ -24,6 +24,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "node test/plugin-harness.cjs",
     "prepare": "npm run build",
     "setup": "node scripts/setup.mjs",
     "bridge": "node --env-file-if-exists=.env dist/bridge.js",
