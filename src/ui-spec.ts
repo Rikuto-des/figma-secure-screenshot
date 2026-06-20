@@ -54,7 +54,7 @@ export type SizeValue = "HUG" | "FILL" | number;
 
 export const LAYOUT_MODES = ["VERTICAL", "HORIZONTAL"] as const;
 export const PRIMARY_ALIGNS = ["MIN", "CENTER", "MAX", "SPACE_BETWEEN"] as const;
-export const COUNTER_ALIGNS = ["MIN", "CENTER", "MAX", "STRETCH"] as const;
+export const COUNTER_ALIGNS = ["MIN", "CENTER", "MAX", "BASELINE"] as const;
 
 export type LayoutMode = (typeof LAYOUT_MODES)[number];
 export type PrimaryAlign = (typeof PRIMARY_ALIGNS)[number];
