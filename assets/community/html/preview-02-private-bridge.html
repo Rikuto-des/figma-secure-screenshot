@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1600, initial-scale=1" />
+    <title>Private bridge preview</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { width: 1600px; height: 1000px; margin: 0; overflow: hidden; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+      }
+      .stage {
+        width: 1600px;
+        height: 1000px;
+        padding: 78px 88px;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 54px;
+      }
+      .eyebrow {
+        color: #2563eb;
+        font-size: 22px;
+        font-weight: 720;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      h1 { margin: 14px 0 0; font-size: 68px; line-height: 1; letter-spacing: -0.03em; font-weight: 720; }
+      .note {
+        max-width: 440px;
+        color: #64748b;
+        font-size: 26px;
+        line-height: 1.3;
+        font-weight: 560;
+      }
+      .flow {
+        display: grid;
+        grid-template-columns: 1fr 190px 1fr 190px 1fr;
+        align-items: center;
+        gap: 20px;
+      }
+      .node {
+        height: 500px;
+        border-radius: 34px;
+        background: white;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 28px 70px rgba(15, 23, 42, 0.12);
+        padding: 34px;
+      }
+      .node.dark {
+        background: #111827;
+        color: white;
+      }
+      .node h2 { margin: 0; font-size: 32px; letter-spacing: -0.02em; }
+      .node p { margin: 14px 0 30px; color: #64748b; font-size: 22px; line-height: 1.3; }
+      .node.dark p { color: #cbd5e1; }
+      .screen {
+        height: 310px;
+        border-radius: 24px;
+        background: #f1f5f9;
+        padding: 24px;
+      }
+      .node.dark .screen { background: #1f2937; }
+      .bar { height: 18px; border-radius: 999px; background: #cbd5e1; margin-bottom: 16px; }
+      .node.dark .bar { background: #475569; }
+      .bar.blue { background: #3b82f6; width: 72%; }
+      .bar.green { background: #22c55e; width: 56%; }
+      .arrow {
+        height: 4px;
+        background: #94a3b8;
+        position: relative;
+      }
+      .arrow::after {
+        content: "";
+        position: absolute;
+        right: -2px;
+        top: -8px;
+        border-left: 18px solid #94a3b8;
+        border-top: 10px solid transparent;
+        border-bottom: 10px solid transparent;
+      }
+      .label {
+        margin-top: 22px;
+        text-align: center;
+        color: #475569;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .shield {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 24px;
+        padding: 14px 18px;
+        border-radius: 999px;
+        background: #ecfdf5;
+        color: #166534;
+        font-size: 20px;
+        font-weight: 720;
+      }
+      .shield::before {
+        content: "";
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: #22c55e;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <section class="header">
+        <div>
+          <div class="eyebrow">Private bridge</div>
+          <h1>No public image URLs</h1>
+        </div>
+        <p class="note">Data moves through your local bridge and private tunnel, not a public REST image endpoint.</p>
+      </section>
+      <section class="flow" aria-label="Private bridge flow">
+        <div class="node">
+          <h2>Figma app</h2>
+          <p>Open file, current selection, local plugin API.</p>
+          <div class="screen"><div class="bar blue"></div><div class="bar"></div><div class="bar"></div><div class="bar green"></div></div>
+        </div>
+        <div><div class="arrow"></div><div class="label">loopback</div></div>
+        <div class="node dark">
+          <h2>MCP bridge</h2>
+          <p>Token-authenticated local WebSocket connection.</p>
+          <div class="screen"><div class="bar green"></div><div class="bar"></div><div class="bar blue"></div><div class="bar"></div></div>
+          <div class="shield">read-only</div>
+        </div>
+        <div><div class="arrow"></div><div class="label">private tunnel</div></div>
+        <div class="node">
+          <h2>Copilot</h2>
+          <p>Receives screenshots, metadata, variables, and context.</p>
+          <div class="screen"><div class="bar"></div><div class="bar blue"></div><div class="bar"></div><div class="bar green"></div></div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

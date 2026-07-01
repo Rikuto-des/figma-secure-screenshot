@@ -82,6 +82,41 @@
       .dot.err {
         background: #e0506a;
       }
+      .badge {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+      .badge.design {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+      .badge.dev {
+        background: #e3f2fd;
+        color: #1565c0;
+      }
+      .badge.figjam {
+        background: #fff3e0;
+        color: #e65100;
+      }
+      @media (prefers-color-scheme: dark) {
+        .badge.design { background: #1b3a1b; color: #81c784; }
+        .badge.dev { background: #0d2740; color: #64b5f6; }
+        .badge.figjam { background: #3e2700; color: #ffb74d; }
+      }
+      .mode-note {
+        margin: 6px 0 0;
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--figma-color-text-secondary);
+      }
+      #editorInfo {
+        display: none;
+        margin-bottom: 10px;
+      }
       #log {
         margin-top: 10px;
         height: 150px;
@@ -100,6 +135,11 @@
   <body>
     <h1>Yasuda Figma MCP</h1>
     <p class="sub">Renders locally (like Copy as PNG). Nothing is uploaded to S3.</p>
+
+    <div id="editorInfo">
+      <span id="editorBadge" class="badge"></span>
+      <div id="modeNote" class="mode-note"></div>
+    </div>
 
     <label for="url">Bridge URL (private gh tunnel — loopback)</label>
     <input id="url" placeholder="ws://localhost:3055" value="ws://localhost:3055" />
@@ -149,6 +189,27 @@
       onmessage = function (event) {
         var msg = event.data.pluginMessage;
         if (!msg) return;
+
+        if (msg.type === "editor-context") {
+          var info = $("editorInfo");
+          var badge = $("editorBadge");
+          var note = $("modeNote");
+          info.style.display = "block";
+          if (msg.editorType === "dev") {
+            badge.className = "badge dev";
+            badge.textContent = "Dev Mode";
+            note.textContent = "読み取り専用で動作中。screenshot / design_context / metadata 等すべてのツールが使えます。";
+          } else if (msg.editorType === "figjam") {
+            badge.className = "badge figjam";
+            badge.textContent = "FigJam";
+            note.textContent = "FigJam モードで動作中。figjam / screenshot 等の読み取りツールが使えます。";
+          } else {
+            badge.className = "badge design";
+            badge.textContent = "Design Mode";
+            note.textContent = "すべてのツールが使えます。";
+          }
+          return;
+        }
 
         if (msg.type === "settings") {
           if (msg.settings) {

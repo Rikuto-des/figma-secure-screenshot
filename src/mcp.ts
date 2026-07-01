@@ -23,7 +23,6 @@ import { z } from "zod";
 
 import { startBridgeServer } from "./bridge-core.js";
 import { DEFAULT_CHANNEL, DEFAULT_PORT, type RenderedImage } from "./protocol.js";
-import { validateUiSpec } from "./ui-spec.js";
 
 const BRIDGE_URL = process.env.BRIDGE_URL ?? `ws://127.0.0.1:${DEFAULT_PORT}`;
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN;
@@ -419,7 +418,7 @@ server.registerTool(
   {
     title: "List Figma component sets (variants + property keys)",
     description:
-      "List local component sets and standalone components with their property definitions: variant groups and their options, defaults, and the EXACT property keys (plain name for VARIANT, name#id for TEXT/BOOLEAN/INSTANCE_SWAP) plus a friendly name for each. Use this to plan apply_ui_spec instances accurately. Variants that live inside a set are represented by the set, not listed separately. If the result has truncated:true, narrow with the query argument.",
+      "List local component sets and standalone components with their property definitions: variant groups and their options, defaults, and the EXACT property keys (plain name for VARIANT, name#id for TEXT/BOOLEAN/INSTANCE_SWAP) plus a friendly name for each. Variants that live inside a set are represented by the set, not listed separately. If the result has truncated:true, narrow with the query argument.",
     inputSchema: {
       query: z.string().optional().describe("Case-insensitive substring to match against component/set names."),
       allPages: z.boolean().optional().describe("Search across all pages (default false: current page only)."),
@@ -512,56 +511,6 @@ server.registerTool(
     try {
       const result = await bridge.request("whoami", {});
       return jsonResult(result);
-    } catch (err) {
-      return errorResult(err);
-    }
-  },
-);
-
-// 10) Apply UI spec (WRITE) — build a screen from a declarative spec.
-server.registerTool(
-  "yfigma_apply_ui_spec",
-  {
-    title: "Apply a UI spec to Figma (write)",
-    description:
-      "Create a screen in the open Figma file from a declarative UI spec (see docs/UI_SPEC.ja.md). Requires Figma Design mode. Builds from EXISTING local components and auto-layout — never raw rectangles or absolute coordinates. The model sends only this declarative data (never code); the plugin applies it deterministically and atomically. First observe the design system with yfigma_list_component_sets / yfigma_get_variable_defs to get real componentIds and tokens. Set validateOnly:true to check the spec against the live document without writing. Returns the created root/node ids, or a list of validation errors. Supports frame, instance (with variant/boolean/text/instance-swap props — instance-swap values are a componentId), text (with font loading), token binding for gap/padding/fill, and HUG/FIXED/FILL sizing.",
-    inputSchema: {
-      version: z.literal(1).describe("Spec version. Must be 1."),
-      validateOnly: z
-        .boolean()
-        .optional()
-        .describe("If true, validate against the live document and return a report without writing."),
-      target: z
-        .object({ mode: z.enum(["create", "into-selection", "update-selection"]) })
-        .optional()
-        .describe(
-          'Where to apply: "create" (default — a new screen at the viewport center), "into-selection" (append the root into the selected auto-layout frame), or "update-selection" (update the selected node to match the root).',
-        ),
-      root: z
-        .record(z.unknown())
-        .describe("The single root node (usually a frame). See docs/UI_SPEC.ja.md for the schema."),
-    },
-  },
-  async (args) => {
-    try {
-      const spec: Record<string, unknown> = { version: args.version, root: args.root };
-      if (args.validateOnly !== undefined) spec.validateOnly = args.validateOnly;
-      if (args.target !== undefined) spec.target = args.target;
-
-      // Layer 1: structural validation (the source of truth) — reject early,
-      // before involving the plugin or the live document.
-      const structural = validateUiSpec(spec);
-      if (!structural.valid) {
-        return jsonResult({ valid: false, errors: structural.errors, warnings: structural.warnings });
-      }
-
-      // Layer 2: the plugin re-validates semantically and applies (or dry-runs).
-      const result = (await bridge.request("apply_ui_spec", spec)) as {
-        warnings?: unknown[];
-        [k: string]: unknown;
-      };
-      const warnings = [...structural.warnings, ...(result.warnings ?? [])];
-      return jsonResult({ ...result, warnings });
     } catch (err) {
       return errorResult(err);
     }
